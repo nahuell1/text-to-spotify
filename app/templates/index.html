@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text to Spotify Playlist</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .word-highlight-none {
+            background-color: rgba(239, 68, 68, 0.2);
+            border-bottom: 2px solid rgb(239, 68, 68);
+        }
+        .word-highlight-partial {
+            background-color: rgba(245, 158, 11, 0.2);
+            border-bottom: 2px solid rgb(245, 158, 11);
+        }
+        .word-highlight-covered {
+            background-color: rgba(34, 197, 94, 0.2);
+            border-bottom: 2px solid rgb(34, 197, 94);
+        }
+        .word-highlight-multiple {
+            background-color: rgba(34, 197, 94, 0.4);
+            border-bottom: 2px solid rgb(16, 185, 129);
+        }
+        .song-card {
+            transition: all 0.3s ease;
+        }
+        .song-card.selected {
+            border-color: rgb(34, 197, 94);
+            box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.5);
+        }
+        .tooltip {
+            visibility: hidden;
+            position: absolute;
+            z-index: 10;
+        }
+        .has-tooltip:hover .tooltip {
+            visibility: visible;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-2xl mx-auto">
+            <h1 class="text-4xl font-bold text-center mb-8 text-green-600">Text to Spotify Playlist</h1>
+            
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <div id="loginMessage" class="mb-4 hidden">
+                    <div class="rounded-md bg-yellow-50 p-4">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <h3 class="text-sm font-medium text-yellow-800">Authentication Required</h3>
+                                <div class="mt-2 text-sm text-yellow-700">
+                                    <p>Please log in to Spotify to create playlists.</p>
+                                    <a href="/login" class="font-medium underline">Login with Spotify</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <form id="playlistForm" class="space-y-4">
+                    <div>
+                        <label for="text" class="block text-sm font-medium text-gray-700">Enter your text:</label>
+                        <textarea
+                            id="text"
+                            name="text"
+                            rows="6"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                            placeholder="Type or paste your text here..."
+                            required
+                        ></textarea>
+                    </div>
+                    
+                    <div class="flex justify-center">
+                        <button
+                            type="submit"
+                            class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                        >
+                            Generate Playlist Candidates
+                        </button>
+                    </div>
+                </form>
+
+                <div id="allCandidates" class="mt-6 hidden">
+                    <h2 class="text-lg font-semibold mb-2">Select a playlist candidate:</h2>
+                    <div id="allCandidateLists"></div>
+                </div>
+
+                <div id="confirmSection" class="mt-6 hidden">
+                    <div class="mb-3 text-center">
+                        <div class="flex items-center justify-center space-x-4 mb-2 text-sm">
+                            <div class="flex items-center space-x-1">
+                                <span class="inline-block w-3 h-3 bg-red-100 border border-red-500"></span>
+                                <span>Not covered</span>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <span class="inline-block w-3 h-3 bg-yellow-100 border border-yellow-500"></span>
+                                <span>Partially covered</span>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <span class="inline-block w-3 h-3 bg-green-100 border border-green-500"></span>
+                                <span>Covered</span>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <span class="inline-block w-3 h-3 bg-green-200 border border-green-600"></span>
+                                <span>Multiple matches</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="confirmBtn" class="w-full px-6 py-3 rounded-md bg-green-700 text-white font-bold hover:bg-green-800">Create Playlist from Selected</button>
+                </div>
+
+                <div id="result" class="mt-6 hidden">
+                    <div class="rounded-md bg-green-50 p-4">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <h3 class="text-sm font-medium text-green-800">Playlist Created!</h3>
+                                <div class="mt-2 text-sm text-green-700">
+                                    <p>Your playlist has been created successfully.</p>
+                                    <a id="playlistLink" href="#" target="_blank" class="font-medium underline">Open in Spotify</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="error" class="mt-6 hidden">
+                    <div class="rounded-md bg-red-50 p-4">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <h3 class="text-sm font-medium text-red-800">Error</h3>
+                                <div class="mt-2 text-sm text-red-700">
+                                    <p id="errorMessage"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedPlaylistIdx = 0;
+        let allCandidatesData = [];
+        let originalText = '';
+        let wordCoverageMap = {}; // Tracks coverage of each word in the selected paraphrase
+
+        document.getElementById('playlistForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const text = document.getElementById('text').value;
+            originalText = text;
+            const resultDiv = document.getElementById('result');
+            const errorDiv = document.getElementById('error');
+            const loginMessage = document.getElementById('loginMessage');
+            const allCandidatesDiv = document.getElementById('allCandidates');
+            const allCandidateListsDiv = document.getElementById('allCandidateLists');
+            const confirmSection = document.getElementById('confirmSection');
+            
+            // Show loading indicator
+            allCandidateListsDiv.innerHTML = '<div class="flex justify-center my-8"><div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div></div>';
+            allCandidatesDiv.classList.remove('hidden');
+
+            resultDiv.classList.add('hidden');
+            errorDiv.classList.add('hidden');
+            loginMessage.classList.add('hidden');
+            confirmSection.classList.add('hidden');
+
+            try {
+                const response = await fetch('/generate-playlist', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        'text': text
+                    })
+                });
+                
+                if (response.redirected) {
+                    window.location.href = response.url;
+                    return;
+                }
+                
+                const data = await response.json();
+                allCandidatesData = data.playlist_candidates;
+
+                if (allCandidatesData.length > 0) {
+                    allCandidatesDiv.classList.remove('hidden');
+                    confirmSection.classList.remove('hidden');
+                    allCandidateListsDiv.innerHTML = '';
+                    
+                    allCandidatesData.forEach((playlistCandidate, pIdx) => {
+                        const paraphrase = playlistCandidate.paraphrase;
+                        const advice = playlistCandidate.advice;
+                        const playlist = playlistCandidate.playlist;
+                        const coverage = playlistCandidate.coverage || 0;
+                        const coveragePercent = Math.round(coverage * 100);
+                        const isOriginal = playlistCandidate.is_original || false;
+                        
+                        const div = document.createElement('div');
+                        div.className = 'mb-6 p-4 border rounded-md ' + (pIdx === 0 ? 'border-green-600 bg-green-50' : 'border-gray-300 bg-gray-50');
+                        div.style.cursor = 'pointer';
+                        div.onclick = () => selectPlaylistCandidate(pIdx);
+                        div.id = 'playlist-candidate-' + pIdx;
+                        
+                        // Create header with match percentage
+                        let headerHtml = `<div class="flex justify-between items-center mb-2">
+                            <span><b>${isOriginal ? 'Original Text' : 'Paraphrase ' + pIdx}:</b> <span class="text-sm text-gray-500">(${coveragePercent}% matched)</span></span>
+                            <span class="px-2 py-1 rounded-full text-xs ${coveragePercent > 80 ? 'bg-green-100 text-green-800' : coveragePercent > 60 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}">
+                                ${coveragePercent}% coverage
+                            </span>
+                        </div>`;
+                        
+                        // Create a text visualization for this paraphrase with word highlighting
+                        let paraphraseHtml = `<div class="text-display italic text-lg mb-3" data-playlist-idx="${pIdx}">${paraphrase}</div>`;
+                        
+                        // Add advice if available
+                        let adviceHtml = advice ? 
+                            `<div class="text-blue-700 text-sm my-2 p-2 bg-blue-50 rounded-md">${advice}</div>` : '';
+                        
+                        // Create playlist visualization
+                        let playlistHtml = `<div class="mt-3">
+                            <div class="flex justify-between items-center mb-2">
+                                <b>Playlist:</b>
+                                <label class="flex items-center text-sm">
+                                    <input type="checkbox" class="toggle-all-songs mr-1 h-4 w-4 text-green-600 focus:ring-green-500 rounded" 
+                                        data-playlist-idx="${pIdx}" checked>
+                                    Select all songs
+                                </label>
+                            </div>
+                            <div class="flex flex-wrap gap-2">`;
+                        
+                        // Organize playlist items by phrase
+                        const phraseGroups = {};
+                        if (playlist && playlist.length > 0) {
+                            playlist.forEach((item, songIndex) => {
+                                if (!item.song) return;
+                                
+                                const phrase = item.phrase.toLowerCase();
+                                if (!phraseGroups[phrase]) {
+                                    phraseGroups[phrase] = [];
+                                }
+                                
+                                phraseGroups[phrase].push({
+                                    songIndex,
+                                    item,
+                                    isAdditional: item.is_additional || false
+                                });
+                            });
+                            
+                            // Now render grouped by phrase
+                            Object.entries(phraseGroups).forEach(([phrase, matches]) => {
+                                // Create a phrase group container
+                                playlistHtml += `<div class="w-full mb-2 pb-2 border-b border-gray-200">
+                                    <div class="text-sm font-semibold mb-1">Matches for: "${phrase}"</div>
+                                    <div class="flex flex-wrap gap-2">`;
+                                
+                                matches.forEach(({songIndex, item, isAdditional}) => {
+                                    // Truncate very long song titles
+                                    const songName = item.song.name.length > 60 ? 
+                                        item.song.name.substring(0, 57) + '...' : 
+                                        item.song.name;
+                                    
+                                    // Add a checkbox for song selection with highlighted matched phrase
+                                    playlistHtml += `
+                                        <div class="group relative">
+                                            <div class="song-card inline-block bg-white rounded px-3 py-2 border ${isAdditional ? 'border-blue-300 bg-blue-50' : 'border-gray-300'} hover:border-green-500 hover:shadow-md transition-all selected">
+                                                <div class="flex items-center mb-1">
+                                                    <input type="checkbox" 
+                                                        class="song-checkbox mr-2 h-4 w-4 text-green-600 focus:ring-green-500 rounded" 
+                                                        data-playlist-idx="${pIdx}" 
+                                                        data-song-idx="${songIndex}"
+                                                        data-matched-phrase="${item.phrase}"
+                                                        checked>
+                                                    <div class="font-medium">${songName}</div>
+                                                </div>
+                                                <div class="text-xs text-gray-500">by ${item.song.artist}</div>
+                                                <div class="text-xs ${isAdditional ? 'text-blue-600' : 'text-green-600'} mt-1">
+                                                    ${isAdditional ? 'Additional match' : 'Primary match'} (score: ${item.song.score})
+                                                </div>
+                                            </div>
+                                            ${item.song.name.length > 60 ? 
+                                            `<div class="tooltip p-2 bg-black text-white text-xs rounded shadow-lg max-w-xs -bottom-1 left-1/2 transform -translate-x-1/2 translate-y-full">
+                                                ${item.song.name}
+                                            </div>` : ''}
+                                        </div>`;
+                                });
+                                
+                                playlistHtml += `</div></div>`;
+                            });
+                        } else {
+                            playlistHtml += `<div class="text-gray-500">No songs found for this paraphrase.</div>`;
+                        }
+                        
+                        playlistHtml += `</div></div>`;
+                        
+                        div.innerHTML = headerHtml + paraphraseHtml + adviceHtml + playlistHtml;
+                        allCandidateListsDiv.appendChild(div);
+                    });
+                    
+                    // Initialize with the first candidate selected
+                    selectedPlaylistIdx = 0;
+                    updateWordCoverage(selectedPlaylistIdx);
+                } else {
+                    allCandidateListsDiv.innerHTML = '<div class="text-center p-4 text-red-600">No playlist candidates could be generated. Try a different text.</div>';
+                }
+            } catch (error) {
+                resultDiv.classList.add('hidden');
+                errorDiv.classList.remove('hidden');
+                allCandidateListsDiv.innerHTML = '';
+                document.getElementById('errorMessage').textContent = error.message;
+            }
+        });
+
+        // Function to create a map of word coverage based on selected songs
+        function updateWordCoverage(playlistIdx) {
+            const candidate = allCandidatesData[playlistIdx];
+            const paraphrase = candidate.paraphrase;
+            
+            // Normalize the paraphrase to handle apostrophes and special characters
+            const normalizedParaphrase = paraphrase.toLowerCase()
+                .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+                
+            // Split into words, including handling apostrophes properly
+            const words = normalizedParaphrase.match(/[\w']+/g) || [];
+            
+            // Initialize coverage map
+            wordCoverageMap = {};
+            words.forEach(word => {
+                wordCoverageMap[word.toLowerCase()] = 0;
+            });
+            
+            // Update coverage based on selected songs
+            const selectedCheckboxes = document.querySelectorAll(`input.song-checkbox[data-playlist-idx="${playlistIdx}"]:checked`);
+            selectedCheckboxes.forEach(checkbox => {
+                const songIdx = parseInt(checkbox.getAttribute('data-song-idx'));
+                const matchedPhrase = checkbox.getAttribute('data-matched-phrase').toLowerCase();
+                
+                // Handle the phrase - split it into words
+                const phraseWords = matchedPhrase.match(/[\w']+/g) || [];
+                phraseWords.forEach(word => {
+                    if (wordCoverageMap.hasOwnProperty(word)) {
+                        wordCoverageMap[word]++;
+                    }
+                });
+            });
+            
+            // Update the visualization
+            updateTextDisplay(playlistIdx, words);
+        }
+        
+        // Function to update the text display with word highlighting
+        function updateTextDisplay(playlistIdx, words) {
+            const textDisplay = document.querySelector(`.text-display[data-playlist-idx="${playlistIdx}"]`);
+            if (!textDisplay) return;
+            
+            // Create HTML with spans for each word
+            let html = '';
+            words.forEach(word => {
+                const normalizedWord = word.toLowerCase();
+                let cls = '';
+                
+                if (!wordCoverageMap.hasOwnProperty(normalizedWord)) {
+                    cls = '';  // Regular word, no special highlighting
+                } else if (wordCoverageMap[normalizedWord] === 0) {
+                    cls = 'word-highlight-none';  // Not covered
+                } else if (wordCoverageMap[normalizedWord] === 1) {
+                    cls = 'word-highlight-covered';  // Covered once
+                } else if (wordCoverageMap[normalizedWord] > 1) {
+                    cls = 'word-highlight-multiple';  // Covered multiple times
+                }
+                
+                html += `<span class="${cls}">${word}</span> `;
+            });
+            
+            textDisplay.innerHTML = html;
+        }
+
+        function selectPlaylistCandidate(pIdx) {
+            selectedPlaylistIdx = pIdx;
+            // Update word coverage for the new selection
+            updateWordCoverage(pIdx);
+            
+            // Highlight selected
+            allCandidatesData.forEach((_, i) => {
+                const div = document.getElementById('playlist-candidate-' + i);
+                if (div) {
+                    if (i === pIdx) {
+                        div.classList.add('border-green-600', 'bg-green-50');
+                        div.classList.remove('border-gray-300', 'bg-gray-50');
+                    } else {
+                        div.classList.remove('border-green-600', 'bg-green-50');
+                        div.classList.add('border-gray-300', 'bg-gray-50');
+                    }
+                }
+            });
+        }
+
+        // Event delegation for song checkbox changes
+        document.addEventListener('change', function(e) {
+            if (e.target.classList.contains('song-checkbox')) {
+                const songCard = e.target.closest('.song-card');
+                if (songCard) {
+                    if (e.target.checked) {
+                        songCard.classList.add('selected');
+                    } else {
+                        songCard.classList.remove('selected');
+                    }
+                }
+                
+                // Update word coverage when a song is selected/deselected
+                updateWordCoverage(selectedPlaylistIdx);
+            }
+            
+            // Toggle all songs in a playlist
+            if (e.target.classList.contains('toggle-all-songs')) {
+                const pIdx = e.target.getAttribute('data-playlist-idx');
+                const checkboxes = document.querySelectorAll(`input.song-checkbox[data-playlist-idx="${pIdx}"]`);
+                const shouldCheck = e.target.checked;
+                
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = shouldCheck;
+                    const songCard = checkbox.closest('.song-card');
+                    if (songCard) {
+                        if (shouldCheck) {
+                            songCard.classList.add('selected');
+                        } else {
+                            songCard.classList.remove('selected');
+                        }
+                    }
+                });
+                
+                // Update word coverage
+                updateWordCoverage(selectedPlaylistIdx);
+            }
+        });
+
+        document.getElementById('confirmBtn').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('result');
+            const errorDiv = document.getElementById('error');
+            resultDiv.classList.add('hidden');
+            errorDiv.classList.add('hidden');
+            
+            // Get the selected playlist candidate
+            const playlistCandidate = allCandidatesData[selectedPlaylistIdx];
+            
+            // Get all checked songs from the selected playlist
+            const checkboxes = document.querySelectorAll(`input.song-checkbox[data-playlist-idx="${selectedPlaylistIdx}"]:checked`);
+            const selectedSongs = Array.from(checkboxes).map(checkbox => {
+                const songIdx = parseInt(checkbox.getAttribute('data-song-idx'));
+                return playlistCandidate.playlist[songIdx].song;
+            }).filter(song => song);
+            
+            if (selectedSongs.length === 0) {
+                errorDiv.classList.remove('hidden');
+                document.getElementById('errorMessage').textContent = 'Please select at least one song for your playlist.';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/create-playlist', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        songs: selectedSongs,
+                        text: originalText
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    resultDiv.classList.remove('hidden');
+                    document.getElementById('playlistLink').href = data.playlist_url;
+                } else {
+                    throw new Error(data.detail || 'An error occurred');
+                }
+            } catch (error) {
+                resultDiv.classList.add('hidden');
+                errorDiv.classList.remove('hidden');
+                document.getElementById('errorMessage').textContent = error.message;
+            }
+        });
+
+        // Check if we need to show the login message
+        fetch('/auth-status')
+          .then(res => res.json())
+          .then(data => {
+            if (!data.authenticated) {
+              document.getElementById('loginMessage').classList.remove('hidden');
+            }
+          });
+    </script>
+</body>
+</html>
