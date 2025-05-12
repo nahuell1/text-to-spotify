@@ -6,6 +6,8 @@
 
 An interactive web application that converts text into a Spotify playlist by finding songs whose titles match words and phrases from your input text.
 
+> Demo (without AI paraphrasing) https://text-to-spotify.onrender.com/
+
 ## 🎵 Features
 
 - **Text Conversion**: Turn any text into a Spotify playlist
